@@ -169,10 +169,10 @@ def train(model, train_loader, dev_loader, config):
             preds = torch.argmax(sentiment_logits, dim=1)
             total_acc += (preds == sentiment_labels).sum().item()
 
-
-            print(f"[{current_time}] Epoch [{epoch + 1}/{config['epochs']}], "
-                  f"Batch [{idx + 1}/{len(train_loader)}], "
-                  f"Loss: {loss.item():.4f}")
+            if (idx+1)%3==0:
+                print(f"[{current_time}] Epoch [{epoch + 1}/{config['epochs']}], "
+                      f"Batch [{idx + 1}/{len(train_loader)}], "
+                      f"Loss: {loss.item():.4f}")
 
         avg_loss = total_loss / len(train_loader)
         avg_acc = total_acc / (len(train_loader.dataset))
@@ -183,7 +183,7 @@ def train(model, train_loader, dev_loader, config):
         val_losses.append(val_loss)
         val_accs.append(val_acc)
 
-        print(f"Epoch {epoch+1} | Train Loss: {avg_loss:.4f} | Train Acc: {avg_acc:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
+        # print(f"Epoch {epoch+1} | Train Loss: {avg_loss:.4f} | Train Acc: {avg_acc:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
 
     # 可视化 Loss & Accuracy
     plot_curve(train_losses, val_losses, 'Loss')
@@ -261,7 +261,7 @@ def plot_curve(train_values, val_values, metric):
 config = {
     "device": "cuda" if torch.cuda.is_available() else "cpu",
     "lr": 2e-5,
-    "epochs": 2,
+    "epochs": 4,
     "batch_size":32,
 }
 
