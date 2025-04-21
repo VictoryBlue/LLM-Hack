@@ -1,8 +1,8 @@
-import pandas as pd
 import torch
+import os
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
-from transformers import BertTokenizer, BertModel, AdamW
+from transformers import BertTokenizer, BertModel
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score,confusion_matrix
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -82,20 +82,6 @@ class MultiTaskBertDataset(Dataset):
 
 
 
-#
-# dataset = MultiTaskBertDataset('train.txt', tokenizer, max_len=128)
-#
-# # DataLoader 示例
-#
-# loader = DataLoader(dataset, batch_size=16, shuffle=True)
-
-# for batch in loader:
-#     print(batch['sentiment'])
-#     print(batch['input_ids'].shape)
-#     print(batch['attention_mask'].shape)
-#     print(batch['theme_labels'].shape)  # 多标签
-#     print(batch['sentiment'].shape)     # 多分类
-#     break
 
 
 
@@ -169,29 +155,33 @@ def train(model, train_loader, dev_loader, config):
             preds = torch.argmax(sentiment_logits, dim=1)
             total_acc += (preds == sentiment_labels).sum().item()
 
+            train_losses.append(loss.item())
+            train_accs.append((preds == sentiment_labels).sum().item()/sentiment_labels.size(0))
             if (idx+1)%3==0:
                 print(f"[{current_time}] Epoch [{epoch + 1}/{config['epochs']}], "
                       f"Batch [{idx + 1}/{len(train_loader)}], "
                       f"Loss: {loss.item():.4f}")
 
-        avg_loss = total_loss / len(train_loader)
-        avg_acc = total_acc / (len(train_loader.dataset))
-        train_losses.append(avg_loss)
-        train_accs.append(avg_acc)
+        # avg_loss = total_loss / len(train_loader)
+        # avg_acc = total_acc / (len(train_loader.dataset))
+        # train_losses.append(avg_loss)
+        # train_accs.append(avg_acc)
 
         val_loss, val_acc = evaluate(model, dev_loader, criterion_sentiment, criterion_topic, device)
-        val_losses.append(val_loss)
-        val_accs.append(val_acc)
+        val_losses.extend(val_loss)
+        val_accs.extend(val_acc)
 
-        # print(f"Epoch {epoch+1} | Train Loss: {avg_loss:.4f} | Train Acc: {avg_acc:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
 
     # 可视化 Loss & Accuracy
-    plot_curve(train_losses, val_losses, 'Loss')
-    plot_curve(train_accs, val_accs, 'Accuracy')
+    plot_curve(train_losses, 'train',  'Loss')
+    plot_curve(train_accs, 'train', 'Accuracy')
+    plot_curve(val_losses, 'val','Loss')
+    plot_curve(val_accs, 'val','Accuracy')
 
 
 def evaluate(model, loader, criterion_sentiment, criterion_topic, device):
     model.eval()
+    val_losses, val_accs = [], []
     total_loss, total_acc = 0, 0
     # 初始化存储所有预测和标签：
     all_sentiment_preds = []
@@ -227,6 +217,8 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device):
             preds = torch.argmax(sentiment_logits, dim=1)
             total_acc += (preds == sentiment_labels).sum().item()
 
+            val_losses.append(loss.item())
+            val_accs.append((preds == sentiment_labels).sum().item()/sentiment_labels.size(0))
     # === 情感指标 ===
     print("\n🎯 Sentiment Classification (情感识别)")
     print("Accuracy:", accuracy_score(all_sentiment_labels, all_sentiment_preds))
@@ -244,24 +236,40 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device):
 
     avg_loss = total_loss / len(loader)
     avg_acc = total_acc / len(loader.dataset)
-    return avg_loss, avg_acc
 
+    # return avg_loss, avg_acc
+    return val_losses, val_accs
 
-def plot_curve(train_values, val_values, metric):
-    plt.plot(train_values, label=f"train_{metric}")
-    plt.plot(val_values, label=f"val_{metric}")
+def plot_curve(values, mode, metric, save_dir="plots"):
+    plt.plot(values, label=f"{mode}_{metric}",  color='blue')
     plt.title(metric)
-    plt.xlabel("Epoch")
+
+    # 智能判断间距
+    max_ticks = 15
+    total_points = len(values)
+    step = max(1, total_points // max_ticks)  # 至少间隔为1
+    plt.xticks(range(0, total_points, step))
+    plt.xlabel("batch")
     plt.ylabel(metric)
     plt.legend()
     plt.grid(True)
-    plt.show()
+    # plt.show()
+    if not os.path.exists(save_dir):
+        try:
+            os.makedirs(save_dir)
+            print(f"📁 创建目录成功: {save_dir}")
+        except Exception as e:
+            print(f"❌ 创建目录失败: {e}")
+            save_dir = '.'  # 回退到当前目录
+    filename = os.path.join(save_dir, f"{mode}_{metric}.png")
+    plt.savefig(filename)
+    plt.close()  # 关闭当前图像，避免后续重复绘图
 
 
 config = {
     "device": "cuda" if torch.cuda.is_available() else "cpu",
     "lr": 2e-5,
-    "epochs": 4,
+    "epochs": 10,
     "batch_size":32,
 }
 
@@ -277,4 +285,4 @@ val_dataset = MultiTaskBertDataset('train.txt', tokenizer, max_len=64)
 val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=True)
 train(model, train_loader, val_loader, config)
 
-
+#云端运行 HF_ENDPOINT=https://hf-mirror.com python main.py
