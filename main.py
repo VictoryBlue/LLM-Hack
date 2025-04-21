@@ -245,7 +245,7 @@ def plot_curve(values, mode, metric, save_dir="plots"):
     plt.title(metric)
 
     # 智能判断间距
-    max_ticks = 15
+    max_ticks = 10
     total_points = len(values)
     step = max(1, total_points // max_ticks)  # 至少间隔为1
     plt.xticks(range(0, total_points, step))
@@ -270,7 +270,7 @@ config = {
     "device": "cuda" if torch.cuda.is_available() else "cpu",
     "lr": 2e-5,
     "epochs": 10,
-    "batch_size":32,
+    "batch_size":64,
 }
 
 bert_path = 'bert-base-chinese'  # 可换为本地模型路径
@@ -285,4 +285,4 @@ val_dataset = MultiTaskBertDataset('train.txt', tokenizer, max_len=64)
 val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=True)
 train(model, train_loader, val_loader, config)
 
-#云端运行 HF_ENDPOINT=https://hf-mirror.com python main.py
+#云端运行 HF_ENDPOINT=https://hf-mirror.com python main.py 2>&1 | tee output.log
