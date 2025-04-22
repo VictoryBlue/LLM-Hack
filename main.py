@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import warnings
 from sklearn.exceptions import UndefinedMetricWarning
+import argparse
 
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 
@@ -146,8 +147,7 @@ def train(model, train_loader, dev_loader, config):
 
             loss1 = criterion_sentiment(sentiment_logits, sentiment_labels)
             loss2 = criterion_topic(topic_logits, topic_labels)
-
-            loss = loss1 + loss2
+            loss = loss1 if config["task"] == "sentiment" else loss2
             loss.backward()
             optimizer.step()
 
@@ -162,24 +162,20 @@ def train(model, train_loader, dev_loader, config):
                       f"Batch [{idx + 1}/{len(train_loader)}], "
                       f"Loss: {loss.item():.4f}")
 
-        # avg_loss = total_loss / len(train_loader)
-        # avg_acc = total_acc / (len(train_loader.dataset))
-        # train_losses.append(avg_loss)
-        # train_accs.append(avg_acc)
 
-        val_loss, val_acc = evaluate(model, dev_loader, criterion_sentiment, criterion_topic, device)
+        val_loss, val_acc = evaluate(model, dev_loader, criterion_sentiment, criterion_topic, device, config)
         val_losses.extend(val_loss)
         val_accs.extend(val_acc)
 
 
     # 可视化 Loss & Accuracy
-    plot_curve(train_losses, 'train',  'Loss')
-    plot_curve(train_accs, 'train', 'Accuracy')
-    plot_curve(val_losses, 'val','Loss')
-    plot_curve(val_accs, 'val','Accuracy')
+    plot_curve(train_losses, f'{config["task"]}_train',  'Loss')
+    plot_curve(val_losses, f'{config["task"]}_val','Loss')
+    plot_curve(train_accs, f'{config["task"]}_train', 'Accuracy')
+    plot_curve(val_accs, f'{config["task"]}_val','Accuracy')
 
 
-def evaluate(model, loader, criterion_sentiment, criterion_topic, device):
+def evaluate(model, loader, criterion_sentiment, criterion_topic, device, config):
     model.eval()
     val_losses, val_accs = [], []
     total_loss, total_acc = 0, 0
@@ -201,7 +197,7 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device):
             # 损失
             loss1 = criterion_sentiment(sentiment_logits, sentiment_labels)
             loss2 = criterion_topic(topic_logits, topic_labels)
-            loss = loss1 + loss2
+            loss = loss1 if config["task"]=="sentiment" else loss2
             total_loss += loss.item()
 
             # 情感（多分类）
@@ -215,29 +211,25 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device):
             all_topic_labels.extend(topic_labels.cpu().numpy())
 
             preds = torch.argmax(sentiment_logits, dim=1)
-            total_acc += (preds == sentiment_labels).sum().item()
 
             val_losses.append(loss.item())
             val_accs.append((preds == sentiment_labels).sum().item()/sentiment_labels.size(0))
-    # === 情感指标 ===
-    print("\n🎯 Sentiment Classification (情感识别)")
-    print("Accuracy:", accuracy_score(all_sentiment_labels, all_sentiment_preds))
-    print("Precision:", precision_score(all_sentiment_labels, all_sentiment_preds, average='macro'))
-    print("Recall:", recall_score(all_sentiment_labels, all_sentiment_preds, average='macro'))
-    print("F1 Score:", f1_score(all_sentiment_labels, all_sentiment_preds, average='macro'))
-    print("Confusion Matrix:\n", confusion_matrix(all_sentiment_labels, all_sentiment_preds))
+    if config["task"]=="sentiment":
+        # === 情感指标 ===
+        print("\n🎯 Sentiment Classification (情感识别)")
+        print("Accuracy:", accuracy_score(all_sentiment_labels, all_sentiment_preds))
+        print("Precision:", precision_score(all_sentiment_labels, all_sentiment_preds, average='macro'))
+        print("Recall:", recall_score(all_sentiment_labels, all_sentiment_preds, average='macro'))
+        print("F1 Score:", f1_score(all_sentiment_labels, all_sentiment_preds, average='macro'))
+        print("Confusion Matrix:\n", confusion_matrix(all_sentiment_labels, all_sentiment_preds))
+    elif config["task"]=="topic":
+        # === 主题多标签指标 ===
+        print("\n📚 Topic Classification (主题识别)")
+        print("Accuracy:", accuracy_score(all_topic_labels, all_topic_preds))
+        print("Precision:", precision_score(all_topic_labels, all_topic_preds, average='macro', zero_division=0))
+        print("Recall:", recall_score(all_topic_labels, all_topic_preds, average='macro', zero_division=0))
+        print("F1 Score:", f1_score(all_topic_labels, all_topic_preds, average='macro', zero_division=0))
 
-    # === 主题多标签指标 ===
-    print("\n📚 Topic Classification (主题识别)")
-    print("Accuracy:", accuracy_score(all_topic_labels, all_topic_preds))
-    print("Precision:", precision_score(all_topic_labels, all_topic_preds, average='macro', zero_division=0))
-    print("Recall:", recall_score(all_topic_labels, all_topic_preds, average='macro', zero_division=0))
-    print("F1 Score:", f1_score(all_topic_labels, all_topic_preds, average='macro', zero_division=0))
-
-    avg_loss = total_loss / len(loader)
-    avg_acc = total_acc / len(loader.dataset)
-
-    # return avg_loss, avg_acc
     return val_losses, val_accs
 
 def plot_curve(values, mode, metric, save_dir="plots"):
@@ -253,7 +245,6 @@ def plot_curve(values, mode, metric, save_dir="plots"):
     plt.ylabel(metric)
     plt.legend()
     plt.grid(True)
-    # plt.show()
     if not os.path.exists(save_dir):
         try:
             os.makedirs(save_dir)
@@ -263,7 +254,13 @@ def plot_curve(values, mode, metric, save_dir="plots"):
             save_dir = '.'  # 回退到当前目录
     filename = os.path.join(save_dir, f"{mode}_{metric}.png")
     plt.savefig(filename)
-    plt.close()  # 关闭当前图像，避免后续重复绘图
+    plt.close()
+
+
+parser = argparse.ArgumentParser(description="命令行参数传入脚本")
+parser.add_argument('--task', type=str, required=True, help="sentiment｜topic")
+
+args = parser.parse_args()
 
 
 config = {
@@ -271,6 +268,7 @@ config = {
     "lr": 2e-5,
     "epochs": 10,
     "batch_size":64,
+    "task": args.task
 }
 
 bert_path = 'bert-base-chinese'  # 可换为本地模型路径
@@ -285,4 +283,4 @@ val_dataset = MultiTaskBertDataset('train.txt', tokenizer, max_len=64)
 val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=True)
 train(model, train_loader, val_loader, config)
 
-#云端运行 HF_ENDPOINT=https://hf-mirror.com python main.py 2>&1 | tee output.log
+#云端运行 HF_ENDPOINT=https://hf-mirror.com python main.py --task "sentiment" 2>&1 | tee output.log
