@@ -157,7 +157,7 @@ def train(model, train_loader, dev_loader, config):
 
             train_losses.append(loss.item())
             train_accs.append((preds == sentiment_labels).sum().item()/sentiment_labels.size(0))
-            if (idx+1)%3==0:
+            if (idx+1)%5==0:
                 print(f"[{current_time}] Epoch [{epoch + 1}/{config['epochs']}], "
                       f"Batch [{idx + 1}/{len(train_loader)}], "
                       f"Loss: {loss.item():.4f}")
