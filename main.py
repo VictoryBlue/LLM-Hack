@@ -132,7 +132,6 @@ def train(model, train_loader, dev_loader, config):
 
     for epoch in range(config["epochs"]):
         model.train()
-        total_loss, total_acc = 0, 0
 
 
         for idx, batch in enumerate(train_loader):
@@ -152,17 +151,20 @@ def train(model, train_loader, dev_loader, config):
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
-
             train_losses.append(loss.item())
-
 
             if config["task"] == "sentiment":
                 preds = torch.argmax(sentiment_logits, dim=1)
                 train_accs.append(accuracy_score(sentiment_labels.cpu().numpy(), preds.cpu().numpy()))
             elif config["task"] == "topic":
                 topic_pred_binary = torch.sigmoid(topic_logits) > 0.5  # 转为0/1
-                train_accs.append(accuracy_score(topic_labels.cpu().numpy(), topic_pred_binary.cpu().numpy()))
+                train_accs.append(accuracy_score(topic_labels.cpu().numpy(),topic_pred_binary.cpu().numpy()))
+            # if config["task"] == "sentiment":
+            #     preds = torch.argmax(sentiment_logits, dim=1)
+            #     train_accs.append(accuracy_score(sentiment_labels.cpu().numpy(), preds.cpu().numpy()))
+            # elif config["task"] == "topic":
+            #     topic_pred_binary = torch.sigmoid(topic_logits) > 0.5  # 转为0/1
+            #     train_accs.append(accuracy_score(topic_labels.cpu().numpy(), topic_pred_binary.cpu().numpy()))
 
             if (idx+1)%5==0:
                 print(f"[{current_time}] Epoch [{epoch + 1}/{config['epochs']}], "
@@ -221,9 +223,13 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device, config
             val_losses.append(loss.item())
             if config["task"] == "sentiment":
                 preds = torch.argmax(sentiment_logits, dim=1)
+                all_sentiment_preds.extend(preds.cpu().numpy())
+                all_sentiment_labels.extend(sentiment_labels.cpu().numpy())
                 val_accs.append(accuracy_score(sentiment_labels.cpu().numpy(), preds.cpu().numpy()))
             elif config["task"] == "topic":
                 topic_pred_binary = torch.sigmoid(topic_logits) > 0.5  # 转为0/1
+                all_topic_preds.extend(topic_pred_binary.cpu().numpy())
+                all_topic_labels.extend(topic_labels.cpu().numpy())
                 val_accs.append(accuracy_score(topic_labels.cpu().numpy(),topic_pred_binary.cpu().numpy()))
 
     if config["task"]=="sentiment":
@@ -271,19 +277,33 @@ def plot_curve(values, mode, metric, save_dir="plots"):
 
 parser = argparse.ArgumentParser(description="命令行参数传入脚本")
 parser.add_argument('--task', type=str, required=True, help="sentiment｜topic")
+parser.add_argument('--env', type=str, required=True, help="online｜offline")
 
 args = parser.parse_args()
 
 
-config = {
-    "device": "cuda" if torch.cuda.is_available() else "cpu",
-    "lr": 1e-5,
-    "epochs": 15,
-    "batch_size":128,
-    "task": args.task,
-    "max_len": 128,
-    "weight_decay": 1e-5
-}
+# env
+if args.env == "online":
+    config = {
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "lr": 1e-5,
+        "epochs": 15,
+        "batch_size": 128,
+        "task": args.task,
+        "max_len": 128,
+        "weight_decay": 1e-5
+    }
+elif args.env == "offline":
+    config = {
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "lr": 1e-5,
+        "epochs": 1,
+        "batch_size": 5,
+        "task": args.task,
+        "max_len": 128,
+        "weight_decay": 1e-5
+    }
+
 
 bert_path = 'bert-base-chinese'  # 可换为本地模型路径
 model = BertMultiTaskModel(bert_path)
@@ -297,4 +317,4 @@ val_dataset = MultiTaskBertDataset('test.txt', tokenizer, max_len=config["max_le
 val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=True)
 train(model, train_loader, val_loader, config)
 
-#云端运行 HF_ENDPOINT=https://hf-mirror.com python main.py --task "sentiment" 2>&1 | tee output.log
+#云端运行 HF_ENDPOINT=https://hf-mirror.com  python main.py --task topic --env online 2>&1 | tee output.log
