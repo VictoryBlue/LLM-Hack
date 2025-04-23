@@ -1,0 +1,2 @@
+HF_ENDPOINT=https://hf-mirror.com python main.py --task "sentiment" 2>&1 | tee ./log/sentiment_output.log
+HF_ENDPOINT=https://hf-mirror.com python main.py --task "topic" 2>&1 | tee ./log/topic_output.log

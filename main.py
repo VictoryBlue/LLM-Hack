@@ -117,6 +117,7 @@ class BertMultiTaskModel(nn.Module):
 
 def train(model, train_loader, dev_loader, config):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 开始训练")
+    print("config:", ", ".join(f"{k}={v}" for k, v in config.items()))
     device = config["device"]
     model = model.to(device)
 
@@ -124,7 +125,7 @@ def train(model, train_loader, dev_loader, config):
     criterion_sentiment = nn.CrossEntropyLoss()
     criterion_topic = nn.BCEWithLogitsLoss()
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"])
 
     train_losses, val_losses = [], []
     train_accs, val_accs = [], []
@@ -159,7 +160,7 @@ def train(model, train_loader, dev_loader, config):
             train_accs.append((preds == sentiment_labels).sum().item()/sentiment_labels.size(0))
             if (idx+1)%5==0:
                 print(f"[{current_time}] Epoch [{epoch + 1}/{config['epochs']}], "
-                      f"Batch [{idx + 1}/{len(train_loader)}], "
+                      f"Complete [{idx + 1}/{len(train_loader)}], "
                       f"Loss: {loss.item():.4f}")
 
 
@@ -210,7 +211,6 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device, config
             all_topic_preds.extend(topic_pred_binary.cpu().numpy())
             all_topic_labels.extend(topic_labels.cpu().numpy())
 
-            preds = torch.argmax(sentiment_logits, dim=1)
 
             val_losses.append(loss.item())
             val_accs.append((preds == sentiment_labels).sum().item()/sentiment_labels.size(0))
@@ -265,10 +265,12 @@ args = parser.parse_args()
 
 config = {
     "device": "cuda" if torch.cuda.is_available() else "cpu",
-    "lr": 2e-5,
-    "epochs": 10,
-    "batch_size":64,
-    "task": args.task
+    "lr": 1e-5,
+    "epochs": 15,
+    "batch_size":128,
+    "task": args.task,
+    "max_len": 128,
+    "weight_decay": 1e-5
 }
 
 bert_path = 'bert-base-chinese'  # 可换为本地模型路径
@@ -276,10 +278,10 @@ model = BertMultiTaskModel(bert_path)
 
 tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
 
-train_dataset = MultiTaskBertDataset('train.txt', tokenizer, max_len=64)
+train_dataset = MultiTaskBertDataset('train.txt', tokenizer, max_len=config["max_len"])
 train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
 
-val_dataset = MultiTaskBertDataset('train.txt', tokenizer, max_len=64)
+val_dataset = MultiTaskBertDataset('test.txt', tokenizer, max_len=config["max_len"])
 val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=True)
 train(model, train_loader, val_loader, config)
 
