@@ -82,10 +82,6 @@ class MultiTaskBertDataset(Dataset):
         }
 
 
-
-
-
-
 class BertMultiTaskModel(nn.Module):
     def __init__(self, bert_path, num_sentiment_classes=3, num_topic_classes=10):
         super().__init__()
@@ -108,11 +104,6 @@ class BertMultiTaskModel(nn.Module):
         topic_logits = self.topic_fc(pooled_output)
 
         return sentiment_logits, topic_logits
-
-
-
-
-
 
 
 def train(model, train_loader, dev_loader, config):
@@ -207,18 +198,6 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device, config
             loss1 = criterion_sentiment(sentiment_logits, sentiment_labels)
             loss2 = criterion_topic(topic_logits, topic_labels)
             loss = loss1 if config["task"]=="sentiment" else loss2
-
-
-            # # 情感（多分类）
-            # preds = torch.argmax(sentiment_logits, dim=1)
-            # all_sentiment_preds.extend(preds.cpu().numpy())
-            # all_sentiment_labels.extend(sentiment_labels.cpu().numpy())
-
-            # # 主题（多标签）
-            # topic_pred_binary = torch.sigmoid(topic_logits) > 0.5  # 转为0/1
-            # all_topic_preds.extend(topic_pred_binary.cpu().numpy())
-            # all_topic_labels.extend(topic_labels.cpu().numpy())
-
 
             val_losses.append(loss.item())
             if config["task"] == "sentiment":
@@ -317,4 +296,3 @@ val_dataset = MultiTaskBertDataset('test.txt', tokenizer, max_len=config["max_le
 val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=True)
 train(model, train_loader, val_loader, config)
 
-#云端运行 HF_ENDPOINT=https://hf-mirror.com  python main.py --task topic --env online 2>&1 | tee output.log
