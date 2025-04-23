@@ -153,11 +153,17 @@ def train(model, train_loader, dev_loader, config):
             optimizer.step()
 
             total_loss += loss.item()
-            preds = torch.argmax(sentiment_logits, dim=1)
-            total_acc += (preds == sentiment_labels).sum().item()
 
             train_losses.append(loss.item())
-            train_accs.append((preds == sentiment_labels).sum().item()/sentiment_labels.size(0))
+
+
+            if config["task"] == "sentiment":
+                preds = torch.argmax(sentiment_logits, dim=1)
+                train_accs.append(accuracy_score(sentiment_labels.cpu().numpy(), preds.cpu().numpy()))
+            elif config["task"] == "topic":
+                topic_pred_binary = torch.sigmoid(topic_logits) > 0.5  # 转为0/1
+                train_accs.append(accuracy_score(topic_labels.cpu().numpy(), topic_pred_binary.cpu().numpy()))
+
             if (idx+1)%5==0:
                 print(f"[{current_time}] Epoch [{epoch + 1}/{config['epochs']}], "
                       f"Complete [{idx + 1}/{len(train_loader)}], "
@@ -179,7 +185,7 @@ def train(model, train_loader, dev_loader, config):
 def evaluate(model, loader, criterion_sentiment, criterion_topic, device, config):
     model.eval()
     val_losses, val_accs = [], []
-    total_loss, total_acc = 0, 0
+
     # 初始化存储所有预测和标签：
     all_sentiment_preds = []
     all_sentiment_labels = []
@@ -199,21 +205,27 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device, config
             loss1 = criterion_sentiment(sentiment_logits, sentiment_labels)
             loss2 = criterion_topic(topic_logits, topic_labels)
             loss = loss1 if config["task"]=="sentiment" else loss2
-            total_loss += loss.item()
 
-            # 情感（多分类）
-            preds = torch.argmax(sentiment_logits, dim=1)
-            all_sentiment_preds.extend(preds.cpu().numpy())
-            all_sentiment_labels.extend(sentiment_labels.cpu().numpy())
 
-            # 主题（多标签）
-            topic_pred_binary = torch.sigmoid(topic_logits) > 0.5  # 转为0/1
-            all_topic_preds.extend(topic_pred_binary.cpu().numpy())
-            all_topic_labels.extend(topic_labels.cpu().numpy())
+            # # 情感（多分类）
+            # preds = torch.argmax(sentiment_logits, dim=1)
+            # all_sentiment_preds.extend(preds.cpu().numpy())
+            # all_sentiment_labels.extend(sentiment_labels.cpu().numpy())
+
+            # # 主题（多标签）
+            # topic_pred_binary = torch.sigmoid(topic_logits) > 0.5  # 转为0/1
+            # all_topic_preds.extend(topic_pred_binary.cpu().numpy())
+            # all_topic_labels.extend(topic_labels.cpu().numpy())
 
 
             val_losses.append(loss.item())
-            val_accs.append((preds == sentiment_labels).sum().item()/sentiment_labels.size(0))
+            if config["task"] == "sentiment":
+                preds = torch.argmax(sentiment_logits, dim=1)
+                val_accs.append(accuracy_score(sentiment_labels.cpu().numpy(), preds.cpu().numpy()))
+            elif config["task"] == "topic":
+                topic_pred_binary = torch.sigmoid(topic_logits) > 0.5  # 转为0/1
+                val_accs.append(accuracy_score(topic_labels.cpu().numpy(),topic_pred_binary.cpu().numpy()))
+
     if config["task"]=="sentiment":
         # === 情感指标 ===
         print("\n🎯 Sentiment Classification (情感识别)")
@@ -234,7 +246,7 @@ def evaluate(model, loader, criterion_sentiment, criterion_topic, device, config
 
 def plot_curve(values, mode, metric, save_dir="plots"):
     plt.plot(values, label=f"{mode}_{metric}",  color='blue')
-    plt.title(metric)
+    plt.title(f"{mode}_{metric}")
 
     # 智能判断间距
     max_ticks = 10
